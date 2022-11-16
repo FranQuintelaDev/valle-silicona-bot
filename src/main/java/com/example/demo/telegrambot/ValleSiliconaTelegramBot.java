@@ -1,4 +1,4 @@
-package com.vallesilicona.bot.telegrambot;
+package com.example.demo.telegrambot;
 
 import org.springframework.stereotype.Service;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;

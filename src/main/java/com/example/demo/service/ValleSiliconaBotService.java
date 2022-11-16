@@ -1,4 +1,4 @@
-package com.vallesilicona.bot.service;
+package com.example.demo.service;
 
 import java.io.IOException;
 import java.net.URISyntaxException;
@@ -14,7 +14,7 @@ import org.eclipse.jgit.errors.RepositoryNotFoundException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import com.google.gson.stream.JsonReader;
-import com.vallesilicona.bot.telegrambot.ValleSiliconaTelegramBot;
+import com.example.demo.telegrambot.ValleSiliconaTelegramBot;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
