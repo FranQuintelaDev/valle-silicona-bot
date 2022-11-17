@@ -1,18 +1,20 @@
 package com.example.demo.service;
 
 import java.io.IOException;
-import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
 
 import org.eclipse.jgit.api.Git;
-import org.eclipse.jgit.api.PullCommand;
 import org.eclipse.jgit.api.errors.GitAPIException;
 import org.eclipse.jgit.api.errors.InvalidRemoteException;
+import org.eclipse.jgit.api.errors.TransportException;
 import org.eclipse.jgit.errors.RepositoryNotFoundException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
+
 import com.google.gson.stream.JsonReader;
 import com.example.demo.telegrambot.ValleSiliconaTelegramBot;
 import com.google.gson.Gson;
@@ -25,128 +27,99 @@ import com.google.gson.JsonSyntaxException;
 @Service
 public class ValleSiliconaBotService {
 
-    private final String LOCAL_REPO_PATH = "res/localRepo";
-    private final String TEAM_DATA_LOCATION = "src/data/teamdata.json";
-    private final String MAIN_REF = "refs/heads/main";
-    private final String GIT_REMOTE = "https://github.com/FranQuintelaDev/bootcampsolera-vallesilicona";
-    private final String SOLERA_GIT_REMOTE = "https://github.com/danibanez/bootcampsolera";
+	@Autowired
+	ValleSiliconaTelegramBot valleSiliconaTelegramBot;
 
-    @Autowired
-    ValleSiliconaTelegramBot bot;
+	public void processPostInformation(String postInformation)
+			throws InvalidRemoteException, TransportException, IOException, GitAPIException, TelegramApiException {
+		if (!gitFileHasChanged(postInformation, "src/data/teamdata.json"))
+			return;
 
-    Gson gson = new Gson();
-    private JsonArray teams;
+		getAndUpdateGitRepository("res/localRepo", "https://github.com/FranQuintelaDev/bootcampsolera-vallesilicona");
 
-    public void pullTeamData(String payload) {
-        if (isTeamDataModified(payload)) {
-            try {
-                Git repo = getRepo(LOCAL_REPO_PATH);
-                PullCommand pull = repo.pull();
-                pull.call();
-                readJson(LOCAL_REPO_PATH + "/" + TEAM_DATA_LOCATION);
-            } catch (InvalidRemoteException e) {
-                e.printStackTrace();
-            } catch (IOException e) {
-                e.printStackTrace();
-            } catch (GitAPIException e) {
-                e.printStackTrace();
-            } catch (URISyntaxException e) {
-                e.printStackTrace();
-            }
-        }
-    }
+		JsonObject jsonObject = getJsonFileFromPath("res/localRepo" + "/" + "src/data/teamdata.json");
 
-    private String readJson(String path) {
+		Map<String, Integer> winningTeams = getWinnersFromTeamDataJson(jsonObject);
 
-        /*
-         * 1.- Leer el json con JsonElement jsonElement = new JsonParser().parse(path);
-         */
-        JsonElement jsonElement;
-        try {
-            jsonElement = gson.fromJson(new JsonReader(Files.newBufferedReader(Paths.get(path))),
-                    JsonElement.class);
-            JsonObject jsonObject = jsonElement.getAsJsonObject();
-            teams = jsonObject.getAsJsonArray("teamdata");
-            getCurrentWinner(teams);
-        } catch (JsonIOException e) {
-            e.printStackTrace();
-        } catch (JsonSyntaxException e) {
-            e.printStackTrace();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+		sendWinningTeamsMessage(winningTeams);
 
-        return "";
+	}
 
-    }
+	private JsonObject getJsonFileFromPath(String path) throws JsonIOException, JsonSyntaxException, IOException {
+		Gson gson = new Gson();
+		JsonElement jsonElement = gson.fromJson(new JsonReader(Files.newBufferedReader(Paths.get(path))),
+				JsonElement.class);
+		JsonObject jsonObject = jsonElement.getAsJsonObject();
+		return jsonObject;
+	}
 
-    private boolean isTeamDataModified(String payload) {
-        JsonObject json = gson.fromJson(payload,
-                JsonObject.class);
-        String ref = json.get("ref").getAsString();
-        if(ref.equals(MAIN_REF)){
-            JsonObject headCommit = json.getAsJsonObject("head_commit");
-        // If the value is an Array[], it is parsed as ArrayList
-        JsonArray modifiedFiles = headCommit.getAsJsonArray("modified");
-        for (JsonElement fileName : modifiedFiles) {
-            if (fileName.getAsString().equals(TEAM_DATA_LOCATION)) {
-                return true;
-            }
-        }
-        }
-        return false;
-    }
+	private boolean gitFileHasChanged(String payload, String fileLocation) {
+		Gson gson = new Gson();
 
-    private Git getRepo(String LOCAL_REPO_PATH)
-            throws IOException, GitAPIException, URISyntaxException {
-        Git repo;
-        // We try to get our local repository. If it doesn't exist yet, we create it.
-        try {
-            repo = Git.open(Paths.get(LOCAL_REPO_PATH).toFile());
-        } catch (RepositoryNotFoundException ex) {
-            repo = Git.cloneRepository().setURI(GIT_REMOTE).setDirectory(Paths.get(LOCAL_REPO_PATH).toFile()).call();
-        }
-        return repo;
-    }
+		JsonObject json = gson.fromJson(payload, JsonObject.class);
+		String ref = json.get("ref").getAsString();
+		if (ref.equals("refs/heads/main")) {
+			JsonObject headCommit = json.getAsJsonObject("head_commit");
+			JsonArray modifiedFiles = headCommit.getAsJsonArray("modified");
+			for (JsonElement fileName : modifiedFiles) {
+				if (fileName.getAsString().equals(fileLocation)) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
 
-    public void getCurrentWinner(JsonArray teams) {
-        ArrayList<String> winningTeams = new ArrayList<>();
-        int maxPoints = 0;
-        for (JsonElement team : teams) {
-            JsonArray activities = team.getAsJsonObject().getAsJsonArray("actividades");
-            int teamPoints = 0;
-            for (JsonElement activity : activities) {
-                teamPoints += activity.getAsJsonObject().get("puntos").getAsInt();
-            }
-            if (teamPoints > maxPoints) {
-                maxPoints = teamPoints;
-                winningTeams.clear();
-                winningTeams.add(team.getAsJsonObject().get("name").getAsString());
-            } else if (teamPoints == maxPoints) {
-                winningTeams.add(team.getAsJsonObject().get("name").getAsString());
-            }
-        }
+	private Git getAndUpdateGitRepository(String localPath, String remotePath)
+			throws IOException, InvalidRemoteException, TransportException, GitAPIException {
+		Git gitRepository;
+		try {
+			gitRepository = Git.open(Paths.get("res/localRepo").toFile());
+		} catch (RepositoryNotFoundException ex) {
+			gitRepository = Git.cloneRepository()
+					.setURI("https://github.com/FranQuintelaDev/bootcampsolera-vallesilicona")
+					.setDirectory(Paths.get("res/localRepo").toFile()).call();
+		}
+		gitRepository.pull().call();
+		return gitRepository;
+	}
 
-        String message = "Se ha modificado la clasificación.\n\n";
+	public Map<String, Integer> getWinnersFromTeamDataJson(JsonObject teamDataJson) {
+		teamDataJson.getAsJsonArray("teamdata");
+		Map<String, Integer> winningTeams = new HashMap<String, Integer>();
+		JsonArray teamsJsonArray = teamDataJson.getAsJsonArray("teamdata");
+		Integer totalPointsWinningTeams = 0;
+		for (JsonElement teamsJsonElement : teamsJsonArray) {
+			Integer totalPointsCurrentTeam = 0;
+			JsonArray actividadesJsonArray = teamsJsonElement.getAsJsonObject().getAsJsonArray("actividades");
 
-        if (winningTeams.size() > 1) {
-            message += "¡Hay empate a " + maxPoints + " puntos entre los equipos ";
-            for (int i = 0; i < winningTeams.size(); i++) {
-                if (i == winningTeams.size() - 1) {
-                    message += "y \"" + winningTeams.get(i) + "\"!";
-                } else if (i == winningTeams.size() - 2) {
-                    message += "\"" + winningTeams.get(i) + "\" ";
-                } else {
-                    message += "\"" + winningTeams.get(i) + "\", ";
-                }
-            }
-        } else {
-            message += "Va ganando el equipo \"" + winningTeams.get(0) + "\" con " + maxPoints + " puntos.";
-        }
+			for (JsonElement actividadJsonElement : actividadesJsonArray) {
+				totalPointsCurrentTeam += actividadJsonElement.getAsJsonObject().get("puntos").getAsInt();
+			}
 
-        bot.sendWinnerMessage(message);
-    }
-    
-    
+			if (totalPointsCurrentTeam > totalPointsWinningTeams) {
+				totalPointsWinningTeams = totalPointsCurrentTeam;
+				winningTeams.clear();
+
+			}
+			;
+			if (totalPointsCurrentTeam >= totalPointsWinningTeams)
+				winningTeams.put(teamsJsonElement.getAsJsonObject().get("name").getAsString(), totalPointsWinningTeams);
+		}
+
+		return winningTeams;
+	}
+
+	void sendWinningTeamsMessage(Map<String, Integer> winningTeams) throws TelegramApiException {
+		valleSiliconaTelegramBot.sendMessage(
+				winningTeams.size() > 1 ?  "Los equipos ganadores actualmente son..." : "El equipo ganador actual es...");
+		for (Map.Entry<String, Integer> winningTeam : winningTeams.entrySet()) {
+			valleSiliconaTelegramBot.sendMessage((winningTeam.getKey() + ": " + winningTeam.getValue() + " puntos"));		
+		}
+		valleSiliconaTelegramBot.sendMessage(("¡Y 100 PUNTOS PARA GRYFFINDOR!"));
+
+
+
+	}
 
 }
