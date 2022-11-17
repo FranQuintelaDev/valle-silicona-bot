@@ -212,7 +212,9 @@ public class ValleSiliconaBotController {
 Con esto estaría configurado el endpoint asociado al webhook (controller + service).
 
 
-Para asociar este endpoint al webhook debemos desplegarlo o en su defecto exponer el puerto
-usando 'ngrok' como se explica en  - [exposing-localhost-to-the-internet](https://docs.github.com/en/developers/webhooks-and-events/webhooks/creating-webhooks#exposing-localhost-to-the-internet)
+Para asociar este endpoint al webhook debemos desplegarlo o en su defecto exponer el puerto.
+
+ - Local: exponer el puerto usando 'ngrok' como se explica en  - [exposing-localhost-to-the-internet](https://docs.github.com/en/developers/webhooks-and-events/webhooks/creating-webhooks#exposing-localhost-to-the-internet)
+ - Despliegue en Heroku: - clonar y desplegar en Heroku como se explica en [deploying Spring Boot Applications to Heroku](https://devcenter.heroku.com/articles/deploying-spring-boot-apps-to-heroku#preparing-a-spring-boot-app-for-heroku)
  
-Por último quedaría crear un webhook en el repositorio GitHub y asociarlo a esta url expuesta.
+ Por último quedaría crear un webhook en el repositorio GitHub y asociarlo a esta url.
